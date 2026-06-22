@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Platform, FlatList, ActivityIndicator, Pressable } from 'react-native';
 import { services } from '../data/Services';
 import { Service } from '../types/service';
 import Card from '../components/Card';
 import Filters from '../components/Filters';
+import CustomScroll from '../components/CustomScroll';
 
 function ServicesSearch() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>('Todos');
@@ -11,8 +12,13 @@ function ServicesSearch() {
   const [filteredServices, setFilteredServices] = useState<Service[]>([]);
 
   // Simula la carga de datos aplicando filtros por categoría
-  const loadData = (category: string | null) => {
-    setStatus('loading');
+  const loadData = (category: string | null, isSilent = false) => {
+  return new Promise<void>((resolve) => {
+    if (!isSilent) {
+      setStatus('loading');
+    } else {
+      setFilteredServices([]);
+    }
     setTimeout(() => {
       const simulateError = category === 'Error';
       if (simulateError) {
@@ -27,8 +33,12 @@ function ServicesSearch() {
         }
         setStatus('success');
       }
-    }, 1200);
-  };
+      resolve();
+    }, 1000);
+  });
+};
+
+
 
   // Carga inicial de todos los servicios al montar el componente
   useEffect(() => {
@@ -43,6 +53,45 @@ function ServicesSearch() {
 
   // Filtra los servicios destacados (rating igual o mayor a 4.7)
   const topServices = services.filter(s => s.rating >= 4.7);
+
+  const flatListRef = useRef<FlatList>(null);
+  const [currentTopIndex, setCurrentTopIndex] = useState(0);
+  const AUTO_SCROLL_INTERVAL = 4000; 
+
+  useEffect(() => {
+    // Si no hay servicios recomendados, o solo hay uno, no hacemos auto-scroll
+    if (!topServices || topServices.length <= 1 || !flatListRef.current) return;
+
+    // Temporizador
+    const interval = setInterval(() => {
+      setCurrentTopIndex((prevIndex) => {
+        // Calcular el siguiente índice. Si llegamos al final, volvemos a 0
+        const nextIndex = (prevIndex + 1) % topServices.length;
+        
+        flatListRef.current?.scrollToIndex({
+          index: nextIndex,
+          animated: true,
+          viewPosition: 0,
+        });
+
+        return nextIndex;
+      });
+    }, AUTO_SCROLL_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [topServices.length]);
+
+  const CARD_WIDTH = 200; 
+  const CARD_GAP = 12;   
+
+  const getItemLayout = (
+    data: ArrayLike<any> | null | undefined, 
+    index: number
+  ) => ({
+    length: CARD_WIDTH, 
+    offset: (CARD_WIDTH + CARD_GAP) * index, 
+    index,
+  });
 
   // Renderiza de forma condicional el listado según el estado actual (loading, error o success)
   const renderResultsFilters = () => {
@@ -93,44 +142,46 @@ function ServicesSearch() {
 
   return (
     <View style={styles.container}>
-      {/* Se utiliza una FlatList vacía como scroll principal para poder unificar 
+      {/* Se utiliza el componente CustomScroll vacío como scroll principal para poder unificar 
         las listas horizontales y verticales sin romper el scroll nativo.
       */}
-      <FlatList
-        data={[]}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={null}
-        contentContainerStyle={styles.mainScroll}
-        ListHeaderComponent={
-          <View style={{ paddingTop: 16 }}>
-            
-            {/* CAROUSEL DE SERVICIOS RECOMENDADOS (TOP) */}
-            {topServices.length > 0 && (
-              <View style={{ marginBottom: 16 }}>
-                <Text style={styles.title}>Top Servicios Recomendados</Text>
-                <FlatList
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  data={topServices}
-                  keyExtractor={(item) => `top-${item.id}`}
-                  renderItem={({ item }) => <Card service={item} mode="top" />}
-                  contentContainerStyle={{ padding: 5, paddingTop: 5, paddingRight: 16, gap: 12 }}
-                />
-              </View>
-            )}
-
-            {/* SECCIÓN PRINCIPAL DE FILTROS Y RESULTADOS */}
-            <Text style={[styles.title, { marginTop: 8 }]}>
-              Encuentra los mejores servicios cerca de ti
-            </Text>
-            <Filters selectedCategory={selectedCategory} handleSelectCategory={handleSelectCategory} />
-            
-            <View style={{ marginTop: 16 }}>
-              {renderResultsFilters()}
+      <CustomScroll
+        style={styles.mainScroll}
+        onRefreshAction={() => loadData(selectedCategory, true)}
+      >
+        <View style={{ paddingTop: 16 }}>
+          {/* CAROUSEL HORIZONTAL */}
+          {topServices.length > 0 && (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.title}>Top Servicios Recomendados</Text>
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={topServices}
+                ref={flatListRef}
+                getItemLayout={getItemLayout}
+                onScrollToIndexFailed={(info) => {
+                    console.warn("Scroll failed:", info);
+                    flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+                }}
+                keyExtractor={(item) => `top-${item.id}`}
+                renderItem={({ item }) => <Card service={item} mode="top" />}
+                contentContainerStyle={{ padding: 5, paddingTop: 5, paddingRight: 16, gap: 12 }}
+              />
             </View>
+          )}
+
+          {/* SECCIÓN PRINCIPAL DE FILTROS Y RESULTADOS */}
+          <Text style={[styles.title, { marginTop: 8 }]}>
+            Encuentra los mejores servicios cerca de ti
+          </Text>
+          <Filters selectedCategory={selectedCategory} handleSelectCategory={handleSelectCategory} />
+          
+          <View style={{ marginTop: 16 }}>
+            {renderResultsFilters()}
           </View>
-        }
-      />
+        </View>
+      </CustomScroll>
     </View>
   );
 }

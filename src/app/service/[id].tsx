@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Platform, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Platform, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { services } from '../../data/Services'; // Ajusta la ruta a tus datos reales
+import { services } from '../../data/Services'; 
 import { Star, Clock, User, CheckCircle, XCircle } from 'lucide-react-native';
+import CustomScroll from '../../components/CustomScroll';
 
 export default function ServiceDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [isLoadingScreen, setIsLoadingScreen] = useState(true);  
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Busca el servicio que coincida con el ID de la ruta
   const service = services.find((s) => s.id === id);
@@ -28,6 +30,16 @@ export default function ServiceDetailScreen() {
     };
   }, []);
 
+  const handleRefreshDetail = () => {
+    return new Promise<void>((resolve) => {
+      setIsRefreshing(true);
+      setTimeout(() => {
+        setIsRefreshing(false);
+        resolve();
+      }, 1000);
+    });
+  };
+
   // Estado de error: Servicio no encontrado
   if (!service) {
     return (
@@ -38,7 +50,7 @@ export default function ServiceDetailScreen() {
   }
 
   // Estado de carga en pantalla
-  if (isLoadingScreen) {
+  if (isLoadingScreen || isRefreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#7fac75" />
@@ -48,70 +60,74 @@ export default function ServiceDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      
-      {/* Encabezado de Etiquetas: Categoría y Disponibilidad */}
-      <View style={styles.badgeRow}>
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryText}>{service.category.toUpperCase()}</Text>
+    <CustomScroll 
+      style={[styles.scrollContent, styles.container]}
+      onRefreshAction={handleRefreshDetail}
+    >
+      <View>
+        {/* Encabezado de Etiquetas: Categoría y Disponibilidad */}
+        <View style={styles.badgeRow}>
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryText}>{service.category.toUpperCase()}</Text>
+          </View>
+          <View style={[styles.statusBadge, service.available ? styles.bgAvailable : styles.bgUnavailable]}>
+            {service.available ? (
+              <>
+                <CheckCircle size={14} color="#2F855A" />
+                <Text style={[styles.statusText, { color: '#2F855A' }]}>Disponible</Text>
+              </>
+            ) : (
+              <>
+                <XCircle size={14} color="#C53030" />
+                <Text style={[styles.statusText, { color: '#C53030' }]}>No Disponible</Text>
+              </>
+            )}
+          </View>
         </View>
-        <View style={[styles.statusBadge, service.available ? styles.bgAvailable : styles.bgUnavailable]}>
-          {service.available ? (
-            <>
-              <CheckCircle size={14} color="#2F855A" />
-              <Text style={[styles.statusText, { color: '#2F855A' }]}>Disponible</Text>
-            </>
-          ) : (
-            <>
-              <XCircle size={14} color="#C53030" />
-              <Text style={[styles.statusText, { color: '#C53030' }]}>No Disponible</Text>
-            </>
-          )}
+
+        {/* Título Principal */}
+        <Text style={styles.title}>{service.name}</Text>
+
+        {/* Sección de Calificación (Rating) */}
+        <View style={styles.ratingRow}>
+          <Star size={18} color="#f39c12" fill="#f39c12" />
+          <Text style={styles.ratingValue}>{service.rating}</Text>
+          <Text style={styles.reviewCount}>({service.reviewCount} opiniones)</Text>
         </View>
+
+        {/* Información del Proveedor */}
+        <View style={styles.infoItem}>
+          <User size={18} color="#4A5568" />
+          <View>
+            <Text style={styles.infoLabel}>Proveedor</Text>
+            <Text style={styles.infoValue}>{service.providerName}</Text>
+          </View>
+        </View>
+
+        {/* Información de Duración */}
+        <View style={styles.infoItem}>
+          <Clock size={18} color="#4A5568" />
+          <View>
+            <Text style={styles.infoLabel}>Duración Promedio</Text>
+            <Text style={styles.infoValue}>{service.durationMinutes} min</Text>
+          </View>
+        </View>
+
+        {/* Descripción del Servicio */}
+        <Text style={styles.sectionTitle}>Acerca del servicio</Text>
+        <Text style={styles.description}>{service.description}</Text>
+
+        {/* Listado de Etiquetas (Tags) */}
+        {service.tags && service.tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {service.tags.map(tag => (
+              <View key={tag} style={styles.tagBadge}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
-
-      {/* Título Principal */}
-      <Text style={styles.title}>{service.name}</Text>
-
-      {/* Sección de Calificación (Rating) */}
-      <View style={styles.ratingRow}>
-        <Star size={18} color="#f39c12" fill="#f39c12" />
-        <Text style={styles.ratingValue}>{service.rating}</Text>
-        <Text style={styles.reviewCount}>({service.reviewCount} opiniones)</Text>
-      </View>
-
-      {/* Información del Proveedor */}
-      <View style={styles.infoItem}>
-        <User size={18} color="#4A5568" />
-        <View>
-          <Text style={styles.infoLabel}>Proveedor</Text>
-          <Text style={styles.infoValue}>{service.providerName}</Text>
-        </View>
-      </View>
-
-      {/* Información de Duración */}
-      <View style={styles.infoItem}>
-        <Clock size={18} color="#4A5568" />
-        <View>
-          <Text style={styles.infoLabel}>Duración Promedio</Text>
-          <Text style={styles.infoValue}>{service.durationMinutes} min</Text>
-        </View>
-      </View>
-
-      {/* Descripción del Servicio */}
-      <Text style={styles.sectionTitle}>Acerca del servicio</Text>
-      <Text style={styles.description}>{service.description}</Text>
-
-      {/* Listado de Etiquetas (Tags) */}
-      {service.tags && service.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {service.tags.map(tag => (
-            <View key={tag} style={styles.tagBadge}>
-              <Text style={styles.tagText}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
-      )}
 
       {/* Footer de Acción y Precio */}
       <View style={styles.footer}>
@@ -132,14 +148,13 @@ export default function ServiceDetailScreen() {
         </Pressable>
       </View>
 
-    </ScrollView>
+    </CustomScroll>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     padding: 20,
