@@ -14,7 +14,7 @@ export default function Layout() {
         headerTitle: (props) => (
           <View style={styles.headerRow}>
             <Image
-              source={require('../../assets/iconService.png')}
+              source={require('../../assets/adaptive-icon.png')}
               style={styles.icon}
             />
             <Text style={styles.headerText}>

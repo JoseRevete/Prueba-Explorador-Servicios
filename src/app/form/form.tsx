@@ -7,11 +7,13 @@ import {
   Pressable, 
   ActivityIndicator, 
   Platform, 
-  ScrollView,
   Alert
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FormErrors } from '../../types/form';
+import CustomScroll from '../../components/CustomScroll';
+// Importamos el selector de fecha nativo
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'; 
 
 export default function RequestFormScreen() {
   const { serviceName } = useLocalSearchParams();
@@ -20,31 +22,21 @@ export default function RequestFormScreen() {
   const [isLoadingScreen, setIsLoadingScreen] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Estados locales para los campos del formulario
+  // Estados de los campos
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [fecha, setFecha] = useState('');
+  
+  // Ahora el estado maneja un objeto Date real o null
+  const [fecha, setFecha] = useState<Date | null>(null); 
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Estado para el manejo de errores de validación
   const [errors, setErrors] = useState<FormErrors>({});
 
-  // Helper para verificar si la fecha ingresada es anterior al día de hoy
-  const isPastDate = (inputDate: string): boolean => {
-    const [day, month, year] = inputDate.split('/').map(Number);
-    const fechaIngresada = new Date(year, month - 1, day);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); 
-    return fechaIngresada < today;
-  };
-
-  // Efecto de carga inicial simulada para transiciones fluidas de UI
+  // Efecto de carga inicial simulada
   useEffect(() => {
     let unmounted = false;
-
     const timer = setTimeout(() => {
-      if (!unmounted) {
-        setIsLoadingScreen(false);
-      }
+      if (!unmounted) setIsLoadingScreen(false);
     }, 350);
 
     return () => {
@@ -53,16 +45,14 @@ export default function RequestFormScreen() {
     };
   }, []);
 
-  // Efecto encargado de validar en tiempo real los campos del formulario
+  // Validación en tiempo real (¡Mucho más limpia sin Regex de fechas!)
   useEffect(() => {
     const newErrors: FormErrors = {};
 
-    // Validar longitud del nombre
     if (nombre.trim() !== '' && nombre.trim().length < 3) {
       newErrors.nombre = 'El nombre debe tener al menos 3 caracteres.';
     }
 
-    // Validar caracteres y longitud del número de teléfono
     const phoneRegex = /^[0-9]+$/;
     if (telefono !== '' && !phoneRegex.test(telefono)) {
       newErrors.telefono = 'El teléfono solo debe contener números.';
@@ -70,51 +60,63 @@ export default function RequestFormScreen() {
       newErrors.telefono = 'Número inválido (debe tener entre 7 y 15 dígitos).';
     }
 
-    // Validar formato de fecha (DD/MM/AAAA) y que no sea del pasado
-    const dateRegex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;
-    if (fecha !== '' && !dateRegex.test(fecha)) {
-      newErrors.fecha = 'Formato inválido. Use el formato DD/MM/AAAA.';
-    } else if (fecha !== '' && isPastDate(fecha)) {
-      newErrors.fecha = 'La fecha no puede ser en el pasado.';
+    // Si el usuario abrió el formulario y no ha tocado la fecha, no disparamos error inmediatamente
+    if (fecha === null && nombre.trim() !== '') {
+      // Opcional: Validar si es requerido al intentar enviar
     }
 
     setErrors(newErrors);
   }, [nombre, telefono, fecha]);
 
-  // Bandera que determina si el formulario es inválido o está incompleto
   const isFormInvalid = 
     nombre.trim() === '' || 
     telefono.trim() === '' || 
-    fecha.trim() === '' || 
+    fecha === null || 
     Object.keys(errors).length > 0;
 
-  // Manejador del envío del formulario con simulación de respuesta HTTP
+  // Formateador sutil para pintar la fecha en la caja de texto simulada
+  const getFormattedDate = (date: Date | null): string => {
+    if (!date) return '';
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  // Manejador del cambio de fecha del componente nativo
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    // En Android, la acción de cerrar el modal ocurre al seleccionar
+    setShowDatePicker(Platform.OS === 'ios'); 
+    
+    if (selectedDate) {
+      setFecha(selectedDate);
+    }
+  };
+
   const handleSubmit = () => {
     if (isFormInvalid) return;
-
     setIsSubmitting(true);
 
     setTimeout(() => {
       setIsSubmitting(false);
-      const esExitoso = Math.random() > 0.15; // 85% de probabilidad de éxito
+      const esExitoso = Math.random() > 0.15;
 
       if (esExitoso) {
         Alert.alert(
           '¡Solicitud Exitosa!',
-          `Tu solicitud para "${serviceName}" ha sido procesada correctamente.`,
+          `Tu solicitud para "${serviceName}" el día ${getFormattedDate(fecha)} ha sido procesada.`,
           [{ text: 'Excelente', onPress: () => router.dismissAll() }]
         );
       } else {
         Alert.alert(
           'Error de Conexión',
-          'No se pudo enviar la solicitud en este momento. Inténtalo de nuevo.',
+          'No se pudo enviar la solicitud en este momento.',
           [{ text: 'Entendido' }]
         );
       }
     }, 1500);
   };
 
-  // Renderizado del estado de carga global de la pantalla
   if (isLoadingScreen) {
     return (
       <View style={styles.loadingContainer}>
@@ -125,7 +127,7 @@ export default function RequestFormScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <CustomScroll style={[styles.scrollContent, styles.container]}>
       <Text style={styles.title}>Formulario de Solicitud</Text>
       <Text style={styles.subtitle}>
         Servicio seleccionado: <Text style={styles.highlight}>{serviceName}</Text>
@@ -160,22 +162,32 @@ export default function RequestFormScreen() {
         {errors.telefono ? <Text style={styles.errorMessage}>{errors.telefono}</Text> : null}
       </View>
 
-      {/* Campo: Fecha de visita */}
+      {/* Campo: Fecha de visita (Convertido en un botón táctil elegante) */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Fecha para la visita (DD/MM/AAAA)</Text>
-        <TextInput
-          style={[styles.input, errors.fecha ? styles.inputError : null]}
-          placeholder="Ej. 22/07/2002"
-          placeholderTextColor="#A0AEC0"
-          value={fecha}
-          onChangeText={setFecha}
-          maxLength={10}
-          editable={!isSubmitting}
-        />
-        {errors.fecha ? <Text style={styles.errorMessage}>{errors.fecha}</Text> : null}
+        <Text style={styles.label}>Fecha para la visita *</Text>
+        <Pressable 
+          disabled={isSubmitting}
+          onPress={() => setShowDatePicker(true)}
+          style={[styles.input, styles.datePressable]}
+        >
+          <Text style={[styles.dateText, !fecha ? styles.placeholderText : null]}>
+            {fecha ? getFormattedDate(fecha) : 'Selecciona una fecha...'}
+          </Text>
+        </Pressable>
       </View>
 
-      {/* Botón de envío con feedback interactivo */}
+      {/* Componente del Selector de Fecha Nativo */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={fecha || new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={new Date()} // 🌟 Magia: Bloquea automáticamente cualquier día del pasado
+          onChange={handleDateChange}
+        />
+      )}
+
+      {/* Botón de envío */}
       <Pressable
         disabled={isFormInvalid || isSubmitting}
         style={({ pressed }) => [
@@ -194,17 +206,17 @@ export default function RequestFormScreen() {
           <Text style={styles.buttonText}>Confirmar Solicitud</Text>
         )}
       </Pressable>
-    </ScrollView>
+    </CustomScroll>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     padding: 24,
+    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -213,36 +225,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     gap: 12,
   },
-  loadingText: {
-    fontSize: 15,
-    color: '#718096',
-    fontWeight: '500',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1A202C',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'android' ? 'sans-serif-condensed' : 'System',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#4A5568',
-    marginBottom: 24,
-  },
-  highlight: {
-    fontWeight: 'bold',
-    color: '#7fac75',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2D3748',
-    marginBottom: 8,
-  },
+  loadingText: { fontSize: 15, color: '#718096', fontWeight: '500' },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#1A202C', marginBottom: 4 },
+  subtitle: { fontSize: 15, color: '#4A5568', marginBottom: 24 },
+  highlight: { fontWeight: 'bold', color: '#7fac75' },
+  inputGroup: { marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: '600', color: '#2D3748', marginBottom: 8 },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -253,16 +241,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1A202C',
   },
-  inputError: {
-    borderColor: '#E53E3E',
-    backgroundColor: '#FFF5F5',
+  datePressable: {
+    justifyContent: 'center',
   },
-  errorMessage: {
-    color: '#E53E3E',
-    fontSize: 13,
-    marginTop: 6,
-    fontWeight: '500',
+  dateText: {
+    fontSize: 16,
+    color: '#1A202C',
   },
+  placeholderText: {
+    color: '#A0AEC0',
+  },
+  inputError: { borderColor: '#E53E3E', backgroundColor: '#FFF5F5' },
+  errorMessage: { color: '#E53E3E', fontSize: 13, marginTop: 6, fontWeight: '500' },
   submitButton: {
     backgroundColor: '#7fac75',
     paddingVertical: 14,
@@ -270,28 +260,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
-    shadowColor: '#7fac75',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 2,
   },
-  disabledButton: {
-    backgroundColor: '#E2E8F0',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  pressedButton: {
-    opacity: 0.85,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  loaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  disabledButton: { backgroundColor: '#E2E8F0' },
+  pressedButton: { opacity: 0.85 },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  loaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });
